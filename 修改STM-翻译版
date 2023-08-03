@@ -1,25 +1,14 @@
-# 这个脚本使用stm R包（Roberts等，2016）实现了一个结构化主题模型的测试工作流程。
-# 这个脚本对Nicholas B. Adams的原始脚本做了一些小修改。
-# 原始脚本的链接在这里：
-# https://github.com/nickbadams/D-Lab_TextAnalysisWorkingGroup/tree/master/STM_prep.
-#
-# 脚本修改者：Jose Don T. De Alban
-# 修改日期：2017年9月9日
-# ----------------------------------------
 # 加载库
-# ----------------------------------------
 library(stm) # 用于结构化主题建模的包
 library(igraph) # 用于网络分析和可视化的包
 library(stmCorrViz) # 用于层次相关视图的STM的包
-# ----------------------------------------
+
 # 加载数据
-# ----------------------------------------
 Sys.setlocale(category = 'LC_ALL', locale = 'en_US.UTF-8')
 data <- read.csv("C:/Users/lijiawei/Desktop/论文/learning-stm-master/data/poliblogs2008.csv") # 下载链接：https://goo.gl/4ohgr4
 load("C:/Users/lijiawei/Desktop/论文/learning-stm-master/data/VignetteObjects.RData") # 下载链接：https://goo.gl/xK17EQ
-# ---------------------------------------
+
 # 准备和预处理数据
-# ----------------------------------------
 # 使用textProcessor()函数进行词干提取、停用词删除等操作
 processed <- textProcessor(data$documents, metadata=data)
 # 为STM模型使用结构和索引。确保对象没有缺失值。
@@ -34,11 +23,7 @@ pdf("stm-plot-removed.pdf", width=10, height=8.5)
 plotRemoved(processed$documents, lower.thresh=seq(1,200, by=100))
 dev.off()
 
-
-# ----------------------------------------
 # 估计结构化主题模型
-# ----------------------------------------
-
 # 使用主题流行度参数进行估计。
 # 使用'out'数据运行一个包含20个主题的STM模型。询问主题的流行度如何在文档的元数据中变化，
 # 包括'rating'和'day'。选项's(day)'对'day'变量应用样条标准化。作者指定了最大期望最大化迭代次数=75，
@@ -64,10 +49,8 @@ pdf("stm-plot-prevfit-perspectives-two-topic.pdf", width=14, height=12.5)
 plot(poliblogPrevFit, type="perspectives", topics=c(7,10))
 dev.off()
 
-# ----------------------------------------
-# 评估模型
-# ----------------------------------------
 
+# 评估模型
 # 搜索并选择固定主题数量的模型。
 # 函数selectModel()帮助用户在语义一致性和排他性维度上找到并选择具有理想属性的模型（例如，
 # 平均得分位于图表右上方的模型）。STM将比较多个模型，并保留不会快速收敛的模型。
@@ -123,9 +106,7 @@ pdf("stm-plot-searchk.pdf", width=10, height=8.5)
 plot(kResult)
 dev.off()
 
-# ----------------------------------------
 # 通过绘制结果解释STM
-# ----------------------------------------
 
 # 根据包装说明书，有多种方式可以解释模型结果。这些包括：
 # 1. 显示与主题相关的单词：labelTopics()，sageLabels()
@@ -247,13 +228,13 @@ poliblogInteraction <- stm(out$documents, out$vocab, K=20, prevalence=~rating*da
 prep2 <- estimateEffect(c(20) ~ rating*day, poliblogInteraction, metadata=out$meta, 
                        uncertainty="None")
 pdf("stm-plot-interact-estimate-effect.pdf", width=10, height=8.5)
-plot(prep2, covariate="day", model=poliblogInteraction, method="continuous", xlab="天数",
+plot(prep2, covariate="day", model=poliblogInteraction, method="continuous", xlab="Days",
      moderator="rating", moderator.value="Liberal", linecol="blue", ylim=c(0,0.12), 
      printlegend=F)
-plot(prep2, covariate="day", model=poliblogInteraction, method="continuous", xlab="天数",
+plot(prep2, covariate="day", model=poliblogInteraction, method="continuous", xlab="Days",
      moderator="rating", moderator.value="Conservative", linecol="red", add=T,
      printlegend=F)
-legend(0,0.12, c("自由派", "保守派"), lwd=2, col=c("blue", "red"))
+legend(0,0.12, c("Liberal", "Conservative"), lwd=2, col=c("blue", "red"))
 dev.off()
 
 # ----------------------------------------
