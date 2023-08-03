@@ -1,0 +1,276 @@
+# 这个脚本使用stm R包（Roberts等，2016）实现了一个结构化主题模型的测试工作流程。
+# 这个脚本对Nicholas B. Adams的原始脚本做了一些小修改。
+# 原始脚本的链接在这里：
+# https://github.com/nickbadams/D-Lab_TextAnalysisWorkingGroup/tree/master/STM_prep.
+#
+# 脚本修改者：Jose Don T. De Alban
+# 修改日期：2017年9月9日
+# ----------------------------------------
+# 加载库
+# ----------------------------------------
+library(stm) # 用于结构化主题建模的包
+library(igraph) # 用于网络分析和可视化的包
+library(stmCorrViz) # 用于层次相关视图的STM的包
+# ----------------------------------------
+# 加载数据
+# ----------------------------------------
+Sys.setlocale(category = 'LC_ALL', locale = 'en_US.UTF-8')
+data <- read.csv("C:/Users/lijiawei/Desktop/论文/learning-stm-master/data/poliblogs2008.csv") # 下载链接：https://goo.gl/4ohgr4
+load("C:/Users/lijiawei/Desktop/论文/learning-stm-master/data/VignetteObjects.RData") # 下载链接：https://goo.gl/xK17EQ
+# ---------------------------------------
+# 准备和预处理数据
+# ----------------------------------------
+# 使用textProcessor()函数进行词干提取、停用词删除等操作
+processed <- textProcessor(data$documents, metadata=data)
+# 为STM模型使用结构和索引。确保对象没有缺失值。
+# 使用'lower.thresh'选项删除低频词。有关更多信息，请参阅?prepDocuments。
+out <- prepDocuments(processed$documents, processed$vocab, processed$meta)
+# 输出将具有对象meta、documents和vocab
+docs <- out$documents
+vocab <- out$vocab
+meta <-out$meta
+# 看看使用不同的lower.thresholds会删除多少单词和文档。将图保存为pdf。
+pdf("stm-plot-removed.pdf", width=10, height=8.5)
+plotRemoved(processed$documents, lower.thresh=seq(1,200, by=100))
+dev.off()
+
+
+# ----------------------------------------
+# 估计结构化主题模型
+# ----------------------------------------
+
+# 使用主题流行度参数进行估计。
+# 使用'out'数据运行一个包含20个主题的STM模型。询问主题的流行度如何在文档的元数据中变化，
+# 包括'rating'和'day'。选项's(day)'对'day'变量应用样条标准化。作者指定了最大期望最大化迭代次数=75，
+# 并使用种子来实现可重复性。
+poliblogPrevFit <- stm(out$documents, out$vocab, K=20, prevalence=~rating+s(day), 
+                       max.em.its=75, data=out$meta, init.type="Spectral", 
+                       seed=8458159)
+
+# 使用不同类型绘制STM。查看整个语料库中每个主题的比例。保存为pdf文件。
+pdf("stm-plot-prevfit.pdf", width=10, height=8.5)
+plot(poliblogPrevFit)
+dev.off()
+pdf("stm-plot-prevfit-summary.pdf", width=10, height=8.5)
+plot(poliblogPrevFit, type="summary", xlim=c(0,.4))
+dev.off()
+pdf("stm-plot-prevfit-labels.pdf", width=10, height=8.5)
+plot(poliblogPrevFit, type="labels", topics=c(3,7,20))
+dev.off()
+pdf("stm-plot-prevfit-histogram.pdf", width=14, height=12.5)
+plot(poliblogPrevFit, type="hist")
+dev.off()
+pdf("stm-plot-prevfit-perspectives-two-topic.pdf", width=14, height=12.5)
+plot(poliblogPrevFit, type="perspectives", topics=c(7,10))
+dev.off()
+
+# ----------------------------------------
+# 评估模型
+# ----------------------------------------
+
+# 搜索并选择固定主题数量的模型。
+# 函数selectModel()帮助用户在语义一致性和排他性维度上找到并选择具有理想属性的模型（例如，
+# 平均得分位于图表右上方的模型）。STM将比较多个模型，并保留不会快速收敛的模型。
+poliblogSelect <- selectModel(out$documents, out$vocab, K=20, prevalence=~rating+s(day),
+                              max.em.its=75, data=meta, runs=20, seed=8458159)
+
+# 绘制沿着其主题排他性和语义一致性的不同模型。将图保存为pdf文件。
+pdf("stm-plot-selected.pdf", width=10, height=8.5)
+plotModels(poliblogSelect)
+dev.off()
+
+# 每个STM都有与每个主题相关的语义一致性和排他性值。
+# topicQuality()函数绘制这些值并用其主题编号标记每个值。
+# 将图保存为pdf文件。
+pdf("stm-plot-topic-quality.pdf", width=10, height=8.5)
+topicQuality(model=poliblogPrevFit, documents=docs)
+dev.off()
+
+# 根据最佳语义一致性和排他性值（图表右上角）选择一个模型进行工作。
+selectedModel3 <- poliblogSelect$runout[[3]] # 选择模型＃3
+
+# 另一个选项是manyTopics()函数，它在假设不同主题数量的单独STM中执行模型选择。
+# 它的工作方式与selectModel()相同，除了用户指定他们希望模型拟合的主题数量范围。
+# 例如，具有5、10和15个主题的模型。然后，对于每个主题数量，多次运行selectModel()。
+# 然后通过一个函数处理输出，该函数以排他性和语义一致性为条件获取模型的帕累托优势运行。
+# 如果有多个候选运行（即没有一个弱支配其他运行），则从未支配运行集合中随机选择一个单一模型运行。
+# 将图保存为pdf文件。
+storage <- manyTopics(out$documents, out$vocab, K=c(7:10), prevalence=~rating+s(day),
+                      data=meta, runs=10)
+storageOutput1 <- storage$out[[1]] # 7个主题
+pdf("stm-plot-storage-output1.pdf", width=10, height=8.5)
+plot(storageOutput1)
+dev.off()
+storageOutput2 <- storage$out[[2]] # 8个主题
+pdf("stm-plot-storage-output2.pdf", width=10, height=8.5)
+plot(storageOutput2)
+dev.off()
+storageOutput3 <- storage$out[[3]] # 9个主题
+pdf("stm-plot-storage-output3.pdf", width=10, height=8.5)
+plot(storageOutput3)
+dev.off()
+storageOutput4 <- storage$out[[4]] # 10个主题
+pdf("stm-plot-storage-output4.pdf", width=10, height=8.5)
+plot(storageOutput4)
+dev.off()
+
+# 另选：跨多个主题搜索模型。
+# 让R为您找到由排他性和语义一致性定义的最佳模型，每个K（即＃主题）。
+# searchK()使用数据驱动方法来选择主题数量。将图保存为pdf文件。
+kResult <- searchK(out$documents, out$vocab, K=c(7,10), prevalence=~rating+s(day),
+                   data=meta)
+pdf("stm-plot-searchk.pdf", width=10, height=8.5)
+plot(kResult)
+dev.off()
+
+# ----------------------------------------
+# 通过绘制结果解释STM
+# ----------------------------------------
+
+# 根据包装说明书，有多种方式可以解释模型结果。这些包括：
+# 1. 显示与主题相关的单词：labelTopics()，sageLabels()
+# 2. 显示与特定主题高度相关的文档：findThoughts()
+# 3. 估计元数据和主题之间的关系：estimateEffect()
+# 4. 估计主题相关性：topicCorr()
+
+# labelTopics()。
+# 列出所选主题3、7、20的前几个单词来标记主题。保存为txt文件。
+labelTopicsSel <- labelTopics(poliblogPrevFit, c(3,7,20))
+sink("stm-list-label-topics-selected.txt", append=FALSE, split=TRUE)
+print(labelTopicsSel)
+sink()
+# 列出所有主题的前几个单词来标记主题。保存为txt文件。
+labelTopicsAll <- labelTopics(poliblogPrevFit, c(1:20))
+sink("stm-list-label-topics-all.txt", append=FALSE, split=TRUE)
+print(labelTopicsAll)
+sink()
+
+# sageLabels()。
+# 这可以用作labelTopics()的更详细的替代方案。该函数显示详细的标签，用于深入描述主题和主题-协变量组。
+sink("stm-list-sagelabel.txt", append=FALSE, split=TRUE)
+print(sageLabels(poliblogPrevFit))
+sink()
+
+# findThoughts()。
+# 使用findThoughts()函数读取与用户指定主题高度相关的文档。对象'thoughts1'包含3个关于主题1的文档，
+# 'texts=shortdoc'仅给出前250个单词。为主题3、7、10和20完成了其他示例。
+thoughts1 <- findThoughts(poliblogPrevFit, texts=shortdoc, n=3, topics=1)$docs[[1]]
+pdf("stm-plot-find-thoughts1.pdf", width=10, height=8.5)
+plotQuote(thoughts1, width=40, main="Topic 1")
+dev.off()
+thoughts3 <- findThoughts(poliblogPrevFit, texts=shortdoc, n=3, topics=3)$docs[[1]]
+pdf("stm-plot-find-thoughts3.pdf", width=10, height=8.5)
+plotQuote(thoughts3, width=40, main="Topic 3")
+dev.off()
+thoughts7 <- findThoughts(poliblogPrevFit, texts=shortdoc, n=3, topics=7)$docs[[1]]
+pdf("stm-plot-find-thoughts7.pdf", width=10, height=8.5)
+plotQuote(thoughts7, width=40, main="Topic 7")
+dev.off()
+thoughts10 <- findThoughts(poliblogPrevFit, texts=shortdoc, n=3, topics=10)$docs[[1]]
+pdf("stm-plot-find-thoughts10.pdf", width=10, height=8.5)
+plotQuote(thoughts10, width=40, main="Topic 10")
+dev.off()
+thoughts20 <- findThoughts(poliblogPrevFit, texts=shortdoc, n=3, topics=20)$docs[[1]]
+pdf("stm-plot-find-thoughts20.pdf", width=10, height=8.5)
+plotQuote(thoughts20, width=40, main="Topic 20")
+dev.off()
+
+# estimateEffect()。
+# 根据文档协变量（元数据）探索主题流行度如何在文档中变化。首先，用户必须指定他们希望用于计算效应的变量。
+# 如果在estimateEffect()中指定了多个变量，则所有其他变量都保持在其样本中值。这些参数包括文档属于某个主题的预期比例作为协变量的函数，
+# 或第一差分类型估计，其中特定主题的主题流行度针对两组（例如，自由派与保守派）进行对比。
+out$meta$rating <- as.factor(out$meta$rating)
+prep <- estimateEffect(1:20 ~ rating+s(day), poliblogPrevFit, meta=out$meta, 
+                       uncertainty="Global")
+
+# 查看主题流行度如何在分类协变量的值之间变化
+pdf("stm-plot-estimate-effect-categorical.pdf", width=10, height=8.5)
+plot(prep, covariate="rating", topics=c(3, 7, 20), model=poliblogPrevFit, 
+     method="difference", cov.value1="Liberal", cov.value2="Conservative",
+     xlab="More Conservative ... More Liberal", main="Effect of Liberal vs. Conservative",
+     xlim=c(-.15,.15), labeltype ="custom", custom.labels=c('Obama', 'Sarah Palin', 
+                                                          'Bush Presidency'))
+dev.off()
+
+# 查看主题流行度如何在连续协变量的值之间变化
+pdf("stm-plot-estimate-effect-continuous.pdf", width=10, height=8.5)
+plot(prep, "day", method="continuous", topics=20, model=z, printlegend=FALSE, xaxt="n", 
+     xlab="Time (2008)")
+monthseq <- seq(from=as.Date("2008-01-01"), to=as.Date("2008-12-01"), by="month")
+monthnames <- months(monthseq)
+axis(1, at=as.numeric(monthseq)-min(as.numeric(monthseq)), labels=monthnames)
+dev.off()
+
+# topicCorr()。
+# STM允许主题之间存在相关性。主题之间的正相关表明两个主题都有可能在一个文档中被讨论。
+# 一个图形网络显示了主题之间有多么密切相关（即它们出现在同一个文档中的可能性）。
+# 这个函数需要'igraph'包。
+mod.out.corr <- topicCorr(poliblogPrevFit)
+pdf("stm-plot-topic-correlations.pdf", width=10, height=8.5)
+plot(mod.out.corr)
+dev.off()
+
+# ----------------------------------------
+# 可视化和呈现STM结果
+# ----------------------------------------
+
+# 主题内容。
+# STM可以绘制包含在作为主题内容协变量的协变量中的影响。主题内容变量允许讨论特定主题的词汇有所不同。
+# 首先，必须使用content选项中指定的变量来拟合STM。
+poliblogContent <- stm(out$documents, out$vocab, K=20, prevalence=~rating+s(day), 
+                       content=~rating, max.em.its=75, data=out$meta, 
+                       init.type="Spectral", seed=8458159)
+pdf("stm-plot-content-perspectives.pdf", width=10, height=8.5)
+plot(poliblogContent, type="perspectives", topics=7)
+dev.off()
+
+# ----------------------------------------
+# 词云。
+# ----------------------------------------
+
+pdf("stm-plot-prevfit-wordcloud.pdf", width=10, height=8.5)
+cloud(poliblogPrevFit, topic=7)
+dev.off()
+pdf("stm-plot-content-wordcloud.pdf", width=10, height=8.5)
+cloud(poliblogContent, topic=7)
+dev.off()
+
+# ----------------------------------------
+# 绘制协变量交互
+# ----------------------------------------
+
+# 可以检查协变量之间的交互，使得一个变量可能“调节”另一个变量的效应。
+poliblogInteraction <- stm(out$documents, out$vocab, K=20, prevalence=~rating*day, 
+                           max.em.its=75, data=out$meta, seed=8458159)
+
+# 使用estimateEffect()函数准备协变量，只是这次，我们包括了交互变量。绘制变量并保存为pdf文件。
+prep2 <- estimateEffect(c(20) ~ rating*day, poliblogInteraction, metadata=out$meta, 
+                       uncertainty="None")
+pdf("stm-plot-interact-estimate-effect.pdf", width=10, height=8.5)
+plot(prep2, covariate="day", model=poliblogInteraction, method="continuous", xlab="天数",
+     moderator="rating", moderator.value="Liberal", linecol="blue", ylim=c(0,0.12), 
+     printlegend=F)
+plot(prep2, covariate="day", model=poliblogInteraction, method="continuous", xlab="天数",
+     moderator="rating", moderator.value="Conservative", linecol="red", add=T,
+     printlegend=F)
+legend(0,0.12, c("自由派", "保守派"), lwd=2, col=c("blue", "red"))
+dev.off()
+
+# ----------------------------------------
+# 绘制收敛性
+# ----------------------------------------
+
+pdf("stm-plot-prevfit-convergence.pdf", width=10, height=8.5)
+plot(poliblogPrevFit$convergence$bound, type="l", ylab="近似目标值", 
+     main="收敛性")
+dev.off()
+
+# ----------------------------------------
+# STM的交互式可视化
+# ----------------------------------------
+
+# stmCorrViz()函数生成了一个结构化主题模型中主题层次/相关性的交互式可视化。
+# 该包对主题进行了层次聚类，然后将其导出为JSON对象，并使用D3进行可视化。
+
+stmCorrViz(poliblogPrevFit, "stm-interactive-correlation.html", 
+           documents_raw=data$documents, documents_matrix=out$documents)
